@@ -2,18 +2,18 @@ package game
 
 import "fmt"
 
-type position struct {
-	row    int
-	column int
+type Position struct {
+	Row    int
+	Column int
 }
 
-func newPosition(row int, column int) position {
-	return position{
-		row:    row,
-		column: column,
+func newPosition(row int, column int) Position {
+	return Position{
+		Row:    row,
+		Column: column,
 	}
 }
 
-func toString(position position) string {
-	return fmt.Sprintf("[row: %d, column: %d]", position.row, position.column)
+func (pos Position) ToString() string {
+	return fmt.Sprintf("[row: %d, column: %d]", pos.Row, pos.Column)
 }

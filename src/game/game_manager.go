@@ -7,7 +7,7 @@ import (
 
 const zombieMoveDelay = 2 * time.Second
 
-func Run(game *Game) chan struct{} {
+func (game *Game) Run(sender chan Position) chan struct{} {
 
 	ticker := time.NewTicker(zombieMoveDelay)
 	quit := make(chan struct{})
@@ -15,13 +15,21 @@ func Run(game *Game) chan struct{} {
 		for {
 			select {
 			case <-ticker.C:
-				MoveZombie(game)
-				if IsGameFinished(*game) {
+				var zombiePosition Position
+				if !game.IsGameRunning() {
+					zombiePosition = game.StartGame()
+				} else {
+					zombiePosition = game.MoveZombie()
+				}
+				sender <- zombiePosition
+
+				if game.IsGameFinished() {
 					log.Println("Game is finished. Stopping.")
 					ticker.Stop()
 					return
 				}
 			case <-quit:
+				game.StopGame()
 				ticker.Stop()
 				return
 			}
