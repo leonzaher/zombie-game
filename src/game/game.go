@@ -69,7 +69,7 @@ func (game Game) IsGameFinished() bool {
 
 func (game *Game) StopGame() {
 	log.Println("Stopping game")
-	game.gameRunning = false
+	*game = Game{}
 }
 
 // returns random number in inclusive interval: [min, max]
