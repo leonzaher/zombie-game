@@ -40,12 +40,15 @@ type Client struct {
 	gameInstance *game.Game
 	// Channel for receiving zombie position updates
 	zombiePosition chan game.Position
+	// Channel for receiving game loss, when zombie reaches the end
+	gameLost chan bool
 	// Channel for stopping a running game
 	gameStop chan struct{}
 }
 
 func newClient(hub *Hub, conn *websocket.Conn) Client {
-	return Client{hub: hub, conn: conn, send: make(chan []byte, 256), zombiePosition: make(chan game.Position)}
+	return Client{hub: hub, conn: conn, send: make(chan []byte, 256), zombiePosition: make(chan game.Position),
+		gameLost: make(chan bool)}
 }
 
 // readHandler received messages from the websocket connection and handles them using handleMessage.
@@ -88,8 +91,12 @@ func (c *Client) writeHandler() {
 	for {
 		select {
 		case position := <-c.zombiePosition:
-			output := fmt.Sprintf("WALK %s %d %d", c.gameInstance.GetZombieName(), position.Row, position.Column)
-			c.writeString(output)
+			message := fmt.Sprintf("WALK %s %d %d", c.gameInstance.GetZombieName(), position.Row, position.Column)
+			c.writeString(message)
+
+		case <-c.gameLost:
+			message := fmt.Sprintf("Game lost, %s reached the end!", c.gameInstance.GetZombieName())
+			c.writeString(message)
 
 		case <-ticker.C:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))

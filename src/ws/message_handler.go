@@ -41,7 +41,7 @@ func (client *Client) handleGameStartCommand(playerName string) {
 	client.playerName = playerName
 	gameInstance := game.Game{}
 	client.gameInstance = &gameInstance
-	client.gameStop = client.gameInstance.Run(client.zombiePosition)
+	client.gameStop = client.gameInstance.Run(client.zombiePosition, client.gameLost)
 }
 
 func (client *Client) handleShotCommand(targetRow string, targetColumn string) {
