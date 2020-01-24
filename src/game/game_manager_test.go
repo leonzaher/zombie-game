@@ -3,24 +3,28 @@ package game
 import (
 	"testing"
 	"time"
+	"zombie-game/src/chTypes"
 )
 
 func TestGame_Run_UntilEnd(t *testing.T) {
-	gameInstance := Game{}
-	zombiePositionChannel := make(chan Position)
-	gameLostChannel := make(chan bool)
+	playerName := "test"
+	gameInstance := Game{HostingPlayerName: playerName}
+
+	broadcast := make(chan chTypes.Broadcast)
+	shotAttempt := make(chan chTypes.ShotAttempt)
+	stopGame := make(chan string)
 
 	zombieMoveDelay = 10 * time.Millisecond
 
-	gameInstance.Run(zombiePositionChannel, gameLostChannel)
+	gameInstance.Run(broadcast, shotAttempt, stopGame)
 
 	for {
 		select {
-		case position := <-zombiePositionChannel:
-			println(position.ToString())
-		case gameFinished := <-gameLostChannel:
-			if !gameFinished {
-				t.Errorf("gameFinished should contain true")
+		case message := <-broadcast:
+			println(message.Message)
+		case player := <-stopGame:
+			if player != playerName {
+				t.Errorf("player should be %s, but is %s", playerName, player)
 			}
 			println("Game lost, all good")
 			return
@@ -28,16 +32,4 @@ func TestGame_Run_UntilEnd(t *testing.T) {
 			t.Errorf("Game should have been lost by now, but it isn't")
 		}
 	}
-}
-
-func TestGame_Run_GameStopped(t *testing.T) {
-	gameInstance := Game{}
-	zombiePositionChannel := make(chan Position)
-	gameLostChannel := make(chan bool)
-
-	quitGame := gameInstance.Run(zombiePositionChannel, gameLostChannel)
-
-	time.Sleep(10 * time.Millisecond)
-
-	close(quitGame)
 }
