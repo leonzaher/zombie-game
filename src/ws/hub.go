@@ -1,33 +1,70 @@
 package ws
 
+import (
+	"zombie-game/src/chTypes"
+	"zombie-game/src/game"
+)
+
 type Hub struct {
-	// Registered clients.
-	clients map[*Client]bool
 
-	// Register requests from the clients.
-	register chan *Client
+	// Channel for receiving Message broadcast
+	broadcast chan chTypes.Broadcast
 
-	// Unregister requests from clients.
-	unregister chan *Client
+	// Storage for games hosted by different players
+	gameInstances map[string]*GameData
+
+	// Channel that gets notified when game should end, receives hosting player's name
+	stopGame chan string
+}
+
+type GameData struct {
+	// Name of the player that is hosting the game
+	playerName string
+
+	gameInstance *game.Game
+	// Receivers that can register to receive broadcast messages about this game
+	clientMessageReceivers []chan string
+	// Channel used to make new shot attempts
+	shotAttempt chan chTypes.ShotAttempt
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		clients:    make(map[*Client]bool),
+		broadcast:     make(chan chTypes.Broadcast),
+		gameInstances: make(map[string]*GameData),
+		stopGame:      make(chan string),
 	}
+}
+
+func NewGameData(playerName string) *GameData {
+	return &GameData{
+		playerName:             playerName,
+		gameInstance:           &game.Game{HostingPlayerName: playerName},
+		clientMessageReceivers: make([]chan string, 0),
+		shotAttempt:            make(chan chTypes.ShotAttempt),
+	}
+}
+
+func (hub *Hub) CreateNewGame(hostingPlayerName string) {
+	hub.gameInstances[hostingPlayerName] = NewGameData(hostingPlayerName)
+	hub.gameInstances[hostingPlayerName].gameInstance.Run(hub.broadcast,
+		hub.gameInstances[hostingPlayerName].shotAttempt,
+		hub.stopGame)
+}
+
+func (gameData *GameData) RegisterBroadcastReceiver(receiver chan string) {
+	gameData.clientMessageReceivers = append(gameData.clientMessageReceivers, receiver)
 }
 
 func (h *Hub) Run() {
 	for {
 		select {
-		case client := <-h.register:
-			h.clients[client] = true
-		case client := <-h.unregister:
-			if _, ok := h.clients[client]; ok {
-				delete(h.clients, client)
-				close(client.send)
+		case hostingPlayer := <-h.stopGame:
+			delete(h.gameInstances, hostingPlayer)
+
+		case message := <-h.broadcast:
+			for _, element := range h.gameInstances[message.HostingPlayerName].clientMessageReceivers {
+				element <- message.Message
 			}
 		}
 	}

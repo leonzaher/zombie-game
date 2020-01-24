@@ -10,9 +10,10 @@ const maxRowPosition = 10 - 1
 const maxColumnPosition = 30 - 1
 
 type Game struct {
-	zombieName     string
-	zombiePosition Position
-	gameRunning    bool
+	HostingPlayerName string
+	zombieName        string
+	zombiePosition    Position
+	gameRunning       bool
 }
 
 var zombieNames = [...]string{"Night king", "Frankenstein", "Alien"}
@@ -25,7 +26,7 @@ func (game *Game) StartGame() Position {
 	game.gameRunning = true
 	game.zombieName = zombieNames[randRange(0, len(zombieNames)-1)]
 	game.zombiePosition = generateStartingPosition()
-	log.Println("Started new game. Zombie's position is ", game.zombiePosition.ToString())
+	log.Println("Started new game.", game.zombieName, "'s position is ", game.zombiePosition.ToString())
 	return game.zombiePosition
 }
 

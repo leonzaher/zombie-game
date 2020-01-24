@@ -2,17 +2,18 @@ package ws
 
 import (
 	"fmt"
-	"github.com/gorilla/websocket"
 	"strconv"
 	"strings"
-	"zombie-game/src/game"
+	"zombie-game/src/chTypes"
 )
 
 // game commands
 const (
 	startToken             = "START"
+	joinToken              = "JOIN"
 	shootToken             = "SHOOT"
 	startMessageTokenCount = 2
+	joinMessageTokenCount  = 3
 	shootMessageTokenCount = 3
 )
 
@@ -22,13 +23,19 @@ func (client *Client) handleMessage(message string) {
 	switch tokens[0] {
 	case startToken:
 		if len(tokens) != startMessageTokenCount {
-			client.writeString("START command must have 2 tokens")
+			client.writeString(fmt.Sprintf("%s command must have %s tokens", startToken, startMessageTokenCount))
 			break
 		}
 		client.handleGameStartCommand(tokens[1])
+	case joinToken:
+		if len(tokens) != joinMessageTokenCount {
+			client.writeString(fmt.Sprintf("%s command must have %s tokens", joinToken, joinMessageTokenCount))
+			break
+		}
+		client.handleJoinGameCommand(tokens[1], tokens[2])
 	case shootToken:
 		if len(tokens) != shootMessageTokenCount {
-			client.writeString("SHOOT command must have 3 tokens")
+			client.writeString(fmt.Sprintf("%s command must have %s tokens", shootToken, shootMessageTokenCount))
 			break
 		}
 		client.handleShotCommand(tokens[1], tokens[2])
@@ -38,43 +45,59 @@ func (client *Client) handleMessage(message string) {
 }
 
 func (client *Client) handleGameStartCommand(playerName string) {
-	client.playerName = playerName
-	gameInstance := game.Game{}
-	client.gameInstance = &gameInstance
-	client.gameStop = client.gameInstance.Run(client.zombiePosition, client.gameLost)
+	if _, ok := client.hub.gameInstances[playerName]; ok {
+		client.writeString(fmt.Sprintf("Game is already hosted by %s, join with 'JOIN %s <yourName>'",
+			playerName, playerName))
+		return
+	}
+	client.hub.CreateNewGame(playerName)
+
+	client.hostingPlayerName = playerName
+	client.yourName = playerName
+	client.joinedGame = client.hub.gameInstances[playerName]
+	client.joinedGame.RegisterBroadcastReceiver(client.broadcastReceiver)
+
+	gameStartMessage := fmt.Sprintf("Game started by %s", playerName)
+	client.broadcastMessage(gameStartMessage)
 }
 
-func (client *Client) handleShotCommand(targetRow string, targetColumn string) {
-	if client.gameInstance == nil {
-		client.writeString("You need to start the game first: 'START <player>'")
+func (client *Client) handleJoinGameCommand(hostingPlayerName string, yourName string) {
+	if _, ok := client.hub.gameInstances[hostingPlayerName]; !ok {
+		client.writeString(fmt.Sprintf("Game hosted by %s doesn't exist, start one with 'START <yourName>'",
+			hostingPlayerName))
 		return
 	}
 
-	x, err := strconv.Atoi(targetRow)
+	client.hostingPlayerName = hostingPlayerName
+	client.yourName = yourName
+	client.joinedGame = client.hub.gameInstances[hostingPlayerName]
+	client.joinedGame.RegisterBroadcastReceiver(client.broadcastReceiver)
+
+	gameJoinMessage := fmt.Sprintf("%s joined game hosted by %s", yourName, hostingPlayerName)
+	client.broadcastMessage(gameJoinMessage)
+}
+
+func (client *Client) handleShotCommand(targetRow string, targetColumn string) {
+	if client.joinedGame == nil {
+		client.writeString("You need to start or join a game first: 'START <player>' / 'JOIN <player> <yourName>'")
+		return
+	}
+
+	row, err := strconv.Atoi(targetRow)
 	if err != nil {
 		client.writeString(fmt.Sprintf("Cannot parse token: %s", targetRow))
 		return
 	}
-	y, err := strconv.Atoi(targetColumn)
+	column, err := strconv.Atoi(targetColumn)
 	if err != nil {
 		client.writeString(fmt.Sprintf("Cannot parse token: %s", targetColumn))
 		return
 	}
 
-	if client.gameInstance.IsZombieOnPosition(x, y) {
-		output := fmt.Sprintf("BOOM %s wins!", client.playerName)
-		close(client.gameStop)
-		client.writeString(output)
-	} else {
-		client.writeString("MISS")
+	shotAttempt := chTypes.ShotAttempt{
+		PlayerName: client.yourName,
+		Row:        row,
+		Column:     column,
 	}
-}
-
-func (c *Client) writeString(s string) {
-	w, err := c.conn.NextWriter(websocket.TextMessage)
-	if err != nil {
-		return
-	}
-	w.Write([]byte(s))
-	w.Close()
+	client.joinedGame.shotAttempt <- shotAttempt
 }

@@ -2,20 +2,19 @@ package ws
 
 import (
 	"fmt"
+	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 	"time"
-	"zombie-game/src/game"
-
-	"github.com/gorilla/websocket"
+	"zombie-game/src/chTypes"
 )
 
 const (
-	// Time allowed to write a message to the peer.
+	// Time allowed to write a Message to the peer.
 	writeWait = 10 * time.Second
 
-	// Time allowed to read the next pong message from the peer.
-	pongWait = 60 * time.Second
+	// Time allowed to read the next pong Message from the peer.
+	pongWait = 1 * time.Second
 
 	// Send pings to peer with this period. Must be less than pongWait.
 	pingPeriod = (pongWait * 9) / 10
@@ -26,29 +25,27 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
-// Client is a middleman between the websocket connection and the hub.
+// Client is a middleman between the websocket connection and the hub
 type Client struct {
 	hub *Hub
 
 	// The websocket connection.
 	conn *websocket.Conn
 
-	// Buffered channel of outbound messages.
-	send chan []byte
-
-	playerName   string
-	gameInstance *game.Game
-	// Channel for receiving zombie position updates
-	zombiePosition chan game.Position
-	// Channel for receiving game loss, when zombie reaches the end
-	gameLost chan bool
-	// Channel for stopping a running game
-	gameStop chan struct{}
+	// Game that you joined
+	joinedGame *GameData
+	// Name of hosting player
+	hostingPlayerName string
+	// Name of your player
+	yourName string
+	// Channel for receiving broadcasting messages
+	broadcastReceiver chan string
 }
 
 func newClient(hub *Hub, conn *websocket.Conn) Client {
-	return Client{hub: hub, conn: conn, send: make(chan []byte, 256), zombiePosition: make(chan game.Position),
-		gameLost: make(chan bool)}
+	return Client{hub: hub,
+		conn:              conn,
+		broadcastReceiver: make(chan string)}
 }
 
 // readHandler received messages from the websocket connection and handles them using handleMessage.
@@ -57,8 +54,7 @@ func newClient(hub *Hub, conn *websocket.Conn) Client {
 //  from the client, not system events
 func (c *Client) readHandler() {
 	defer func() {
-		c.hub.unregister <- c
-		//close(c.gameStop)
+		log.Println(fmt.Sprintf("Player %s disconnected", c.yourName))
 		c.conn.Close()
 	}()
 	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
@@ -72,7 +68,7 @@ func (c *Client) readHandler() {
 		}
 
 		message := string(messageBytes)
-		log.Println("Received message:", message)
+		log.Println("Received Message:", message)
 
 		c.handleMessage(message)
 	}
@@ -90,12 +86,7 @@ func (c *Client) writeHandler() {
 	}()
 	for {
 		select {
-		case position := <-c.zombiePosition:
-			message := fmt.Sprintf("WALK %s %d %d", c.gameInstance.GetZombieName(), position.Row, position.Column)
-			c.writeString(message)
-
-		case <-c.gameLost:
-			message := fmt.Sprintf("Game lost, %s reached the end!", c.gameInstance.GetZombieName())
+		case message := <-c.broadcastReceiver:
 			c.writeString(message)
 
 		case <-ticker.C:
@@ -107,6 +98,19 @@ func (c *Client) writeHandler() {
 	}
 }
 
+func (c *Client) broadcastMessage(message string) {
+	c.hub.broadcast <- chTypes.Broadcast{HostingPlayerName: c.hostingPlayerName, Message: message}
+}
+
+func (c *Client) writeString(s string) {
+	w, err := c.conn.NextWriter(websocket.TextMessage)
+	if err != nil {
+		return
+	}
+	w.Write([]byte(s))
+	w.Close()
+}
+
 // serveWs handles websocket requests from the client
 func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -116,7 +120,6 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := newClient(hub, conn)
-	client.hub.register <- &client
 
 	// start read and write handlers
 	go client.writeHandler()
