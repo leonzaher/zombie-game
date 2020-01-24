@@ -22,7 +22,7 @@ To connect to the server, you can use any client that can use websockets.
 
 One client you can use is https://github.com/thehowl/claws, install it and run:
 
-'./claws ws://localhost:<port>'
+'./claws ws://localhost:8080'
 
 ## Playing the game
 To play the game, you need to enter text commands
