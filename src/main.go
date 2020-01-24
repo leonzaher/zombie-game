@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"zombie-game/src/ws"
@@ -17,8 +18,9 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ws.ServeWs(hub, w, r)
 	})
-	err := http.ListenAndServe(":"+*addr, nil)
+	log.Println(fmt.Sprintf("Starting the server at port %s", *addr))
 
+	err := http.ListenAndServe(":"+*addr, nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
