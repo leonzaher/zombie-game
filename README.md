@@ -1,3 +1,6 @@
+# Interview task for Kraken Systems, 3 days deadline
+
+
 ## Zombie Game
 To play the Zombie Game
 
